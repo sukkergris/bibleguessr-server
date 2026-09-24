@@ -1,0 +1,29 @@
+FROM debian:13
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    apt-utils \
+    apt-transport-https \
+    bash \
+    bash-completion \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    iproute2 \
+    iputils-ping \
+    locales \
+    lsb-release \
+    procps \
+    rsync \
+    sudo \
+    vim \
+    wget \
+    && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen \
+    && update-locale LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8

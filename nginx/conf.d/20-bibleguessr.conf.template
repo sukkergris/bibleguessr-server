@@ -1,0 +1,47 @@
+# HTTP redirect
+server {
+    listen 80;
+    access_log /dev/stdout realip;
+    server_name ${DOMAIN_BG} www.${DOMAIN_BG};
+
+    if ($bad_guys = 1) {
+        return 302 $scheme://$host$request_uri;
+    }
+
+    include includes/tarpit.conf;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt_challenges;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS main site
+server {
+    listen 443 ssl;
+    http2 on;
+    access_log /dev/stdout realip;
+    server_name ${DOMAIN_BG} www.${DOMAIN_BG};
+
+    if ($bad_guys = 1) {
+        return 302 $scheme://$host$request_uri;
+    }
+
+    include includes/tarpit.conf;
+
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_BG}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_BG}/privkey.pem;
+    include includes/ssl-params.conf;
+
+    set $site_root /usr/share/nginx/html/bibleguessr;
+
+    include includes/static-assets.conf;
+
+    location / {
+        root $site_root;
+        try_files $uri /index.html;
+    }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "host-replica - bibleguessr - Debian 13",
+  "build": {
+    "dockerfile": "Dockerfile.debian",
+    "context": "../.."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest",
+      "enableNonRootChildContainerUsage": true,
+      "moby": false
+    }
+  },
+  "remoteUser": "root",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/root/.sshtemplate,type=bind,readonly,consistency=cached",
+    "source=claude-${localWorkspaceFolderBasename},target=/root/.claude,type=volume",
+    "source=gemini-${localWorkspaceFolderBasename},target=/root/.gemini,type=volume",
+    "source=continue-${localWorkspaceFolderBasename},target=/root/.continue,type=volume"
+  ],
+  "postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/host-replica/post-container-install.sh",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/xyz,type=bind",
+  "workspaceFolder": "/xyz",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "timonwong.shellcheck",
+        "mads-hartmann.bash-ide-vscode",
+        "huizhou.githd-bashbook",
+        "usernamehw.errorlens",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker",
+        "ahmadalli.vscode-nginx-conf",
+        "rogalmic.bash-debug",
+        "AndreasArvidsson.bashbook",
+        "streetsidesoftware.code-spell-checker",
+        "streetsidesoftware.code-spell-checker-danish",
+        "EditorConfig.EditorConfig",
+        "DavidAnson.vscode-markdownlint",
+        "task.vscode-task",
+        "AndenetAlexander.vim-cheatsheet",
+        "Anthropic.claude-code",
+        "google.google-antigravity"
+      ],
+      "settings": {
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.tabSize": 2
+      }
+    }
+  }
+}

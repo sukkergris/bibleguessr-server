@@ -1,0 +1,34 @@
+# docker-compose.letsencrypt.yml
+# Ultra-simple setup for initial Let's Encrypt certificate issuance
+# Use this to get your first cert, then stop and switch to your main app compose file.
+
+services:
+  nginx:
+    image: docker.io/library/nginx:stable-alpine
+    env_file:
+      - ../../env/nginx.env
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /var/www/letsencrypt_challenges:/var/www/letsencrypt_challenges
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /opt/app/initialize-certs/nginx/letsencrypt_acme.conf:/etc/nginx/conf.d/letsencrypt_acme.conf:ro
+    restart: unless-stopped
+
+# No other services are needed for initial cert issuance.
+
+# Example nginx config (nginx/letsencrypt_acme.conf):
+#
+# server {
+#     listen 80;
+#     server_name your.domain.com www.your.domain.com;
+#     location /.well-known/acme-challenge/ {
+#         root /var/www/letsencrypt_challenges;
+#     }
+# }
+#
+# 1. Place this config in ./nginx/letsencrypt_acme.conf
+# 2. Start this compose file: docker compose -f docker-compose.letsencrypt.yml up
+# 3. Run certbot with webroot: sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d your.domain.com
+# 4. When done, stop this stack and switch to your main compose file.

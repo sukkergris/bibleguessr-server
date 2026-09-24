@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "squidex.cli": {
+      "version": "13.13.0",
+      "commands": [
+        "sq"
+      ],
+      "rollForward": false
+    }
+  }
+}

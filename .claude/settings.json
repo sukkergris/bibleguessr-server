@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(shellcheck /xyz/lib-bash/certs/certs.sh /xyz/scripts/create-dummy-cert.sh /xyz/scripts/create-selfsigned-cert.sh /xyz/scripts/bootstrap-development.sh)",
+      "Bash(mkdir -p /xyz/docs/superpowers/specs)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git check-ignore *)",
+      "Read(//home/container-user/.claude/plugins/cache/superpowers-dev/superpowers/5.1.0/skills/subagent-driven-development/**)",
+      "Bash(git -C /xyz add build/Dockerfile.dev)",
+      "Bash(git -C /xyz commit -m ' *)",
+      "Bash(curl -LsSf \"https://github.com/Orange-OpenSource/hurl/releases/download/8.0.1/hurl-8.0.1-aarch64-unknown-linux-gnu.tar.gz\" -o /tmp/hurl-arm.tar.gz)",
+      "Bash(tar -xzf /tmp/hurl-arm.tar.gz -C /tmp/)",
+      "Bash(cp /tmp/hurl-8.0.1-aarch64-unknown-linux-gnu/bin/hurl /home/container-user/.local/bin/hurl)",
+      "Bash(/home/container-user/.local/bin/hurl --version)",
+      "Bash(getent hosts *)",
+      "Bash(curl -s --max-time 2 http://nginx/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s --max-time 2 --resolve \"nginx-playground.dk:80:$\\(getent hosts nginx)",
+      "Bash(curl -v --max-time 3 \"http://172.25.0.2/.env\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(docker info *)",
+      "Bash(grep -rn \"LOGGING_DRIVER\\\\|journald\\\\|json-file\" /xyz/env /xyz/docker-compose.yml 2>/dev/null; echo \"---daemon.json---\"; cat /etc/docker/daemon.json 2>/dev/null)",
+      "Read(//etc/docker/**)"
+    ],
+    "additionalDirectories": [
+      "/xyz/docs/superpowers"
+    ]
+  }
+}

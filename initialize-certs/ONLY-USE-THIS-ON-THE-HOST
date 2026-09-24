@@ -1,0 +1,25 @@
+# WARNING
+
+️ **WARNING: Production Deployment Only**
+
+This folder is intended **exclusively** for production environments (e.g., VPS, cloud hosting) that are actively serving the site and using Let's Encrypt for SSL/TLS certificates.
+
+## Not for Local Development
+
+Do **not** use these scripts or configurations in local development environments. For development, use the scripts in `scripts/development/` instead.
+
+## Contents
+
+This folder contains certificate initialization and management utilities for production deployments, including:
+
+- Let's Encrypt ACME configuration
+- Docker Compose setup for certificate issuance
+- Production certificate management scripts
+
+## Usage
+
+Only execute scripts from this folder on your production host. Ensure you understand the implications before running any scripts.
+
+---
+
+**When in doubt, ask — do not run these scripts on local or staging environments.**
