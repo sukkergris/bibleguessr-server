@@ -12,7 +12,6 @@ services:
       - ${LETSENCRYPT_CHALLENGES_DIR:?LETSENCRYPT_CHALLENGES_DIR must be set (load env/letsencrypt.env)}:/var/www/letsencrypt_challenges
       - ${LETSENCRYPT_DIR:?LETSENCRYPT_DIR must be set (load env/letsencrypt.env)}:/etc/letsencrypt:ro
       - ${NGINX_DIR:?NGINX_DIR must be set (load env/nginx.env)}:/etc/nginx/
-      - site-fleet-cms-prerender_pages:/var/prerender:ro
     env_file:
       - ./env/nginx.env
       - ./env/app.env
@@ -21,23 +20,21 @@ services:
     #   - web-api
     #   - yarp
     networks:
-      - site-fleet-cms-prod
+      - bibleguessr-prod
     restart: unless-stopped
 
-  webapi:
+  bibleguessr-api:
     image: docker.io/isuperman/bibleguessr-api:${VERSION:?VERSION must be set (load env/app.env)}
     env_file:
       - ./env/bibleguessr/brevo.env
       - ./env/webapi.env
       - ./env/app.env
-    depends_on:
-      - squidex
+    volumes:
+      - ./bibles/bibelen-dk/src:/app/bibles/bibelen-dk/src:ro
     networks:
-      - site-fleet-cms-prod
+      - bibleguessr-prod
     restart: unless-stopped
 
-  bibleguessr-api:
-    image: :0.0.1
 networks:
-  site-fleet-cms-prod:
+  bibleguessr-prod:
     driver: bridge
