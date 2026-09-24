@@ -1,0 +1,11 @@
+version: "3"
+
+tasks:
+  host:bootstrap:
+    desc: (Run on host) Setup development certs on the host
+    cmds:
+      - ./scripts/development/bootstrap-development.sh
+  srv:add-certs-to-container:
+    desc: (Run in container (srv)) Use devcerts as is was letsencrypt produced certs
+    cmds:
+      - ./scripts/development/use-dev-certs-as-if-letsencrypt.sh

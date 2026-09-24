@@ -16,7 +16,7 @@ setup_certs() {
     printf 'Skipping setup_certs: running inside Docker container.\n'
     return 1
   fi
-  local domains=("kfk.test" "hvt.test" "cvp.test" "bibleguessr.test")
+  local domains=("bibleguessr.srv")
   local domain cert_file
 
   for domain in "${domains[@]}"; do
@@ -24,8 +24,6 @@ setup_certs() {
     trust_dev_cert "${cert_file}" "${domain}" || return 1
     add_domain_to_hostfile "${domain}"
     add_domain_to_hostfile www."${domain}"
-    add_domain_to_hostfile squidex."${domain}"
-    add_domain_to_hostfile www.squidex."${domain}"
   done
 }
 
