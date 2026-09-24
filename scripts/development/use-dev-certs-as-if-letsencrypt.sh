@@ -36,7 +36,4 @@ setup::run() {
   printf '[OK] Local cert flow complete and copied to /etc/letsencrypt/live/%s/\n' "${domain}"
 }
 
-setup::run "kfk.test"
-setup::run "hvt.test"
-setup::run "cvp.test"
-setup::run "bibleguessr.test"
+setup::run "bibleguessr.srv"

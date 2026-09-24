@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec *)",
+      "Bash(docker network *)",
+      "Bash(git -C /xyz rev-parse HEAD)",
+      "Bash(ls /xyz/e2e/ && cat /etc/os-release | grep -E \"^\\(NAME|ID\\)=\")",
+      "Read(//usr/lib/**)",
+      "Bash(apt-get update *)",
+      "Bash(apt-get install *)",
+      "Bash(find /usr -name \"hurl\" -type f 2>/dev/null || echo \"Not found in /usr\")",
+      "Read(//usr/**)",
+      "Bash(curl -s https://api.github.com/repos/Orange-OpenSource/hurl/releases/latest)",
+      "Bash(git commit *)",
+      "Bash(LIMIT_RATE=1k envsubst '${LIMIT_RATE}')",
+      "Read(//tmp/**)",
+      "Bash(LIMIT_RATE=0 envsubst '${LIMIT_RATE}' < /xyz/nginx/includes/tarpit.conf.template > /tmp/tarpit-test.conf && grep \"limit_rate\" /tmp/tarpit-test.conf)",
+      "Bash(grep -c '\\\\${LIMIT_RATE}' /xyz/nginx/includes/tarpit.conf.template)",
+      "Bash(LIMIT_RATE=1k envsubst '${DOMAIN} ${LIMIT_RATE}')",
+      "Bash(LIMIT_RATE=0 envsubst '${DOMAIN} ${LIMIT_RATE}')",
+      "Bash(LIMIT_RATE=10k envsubst '${DOMAIN} ${LIMIT_RATE}')",
+      "Bash(grep -n \"LIMIT_RATE\\\\|\\\\${\" /xyz/nginx/conf.d/10-main-site.conf.template /xyz/nginx/conf.d/20-squidex.conf.template)",
+      "Bash(bash -c *)",
+      "Bash(grep -n 'nginx_variable\\\\|$request\\\\|$host\\\\|$uri' /xyz/nginx/includes/tarpit.conf.template)",
+      "Bash(git -C /xyz ls-files nginx/includes/tarpit.conf)",
+      "Bash(grep -r 'envsubst\\\\|LIMIT_RATE\\\\|\\\\$\\\\${' /xyz --include=\"*.yml\" --include=\"*.yaml\" --include=\"*.sh\" -l)",
+      "Bash(grep -r 'envsubst\\\\|\\\\$\\\\${' /xyz --include=\"*.yml\" --include=\"*.yaml\")",
+      "Bash(task --list)",
+      "Bash(task --dry nginx:test:debug)",
+      "Bash(task --version)",
+      "Bash(xargs ls -la)",
+      "Bash(# Check if there's a --connect-to or --resolve option usage anywhere, or if /etc/hosts is pre-populated *)",
+      "Read(//etc/**)",
+      "Bash(docker compose *)",
+      "Bash(docker stop *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

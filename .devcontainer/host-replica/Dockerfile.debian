@@ -2,6 +2,11 @@ FROM debian:13
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Debian's own docker-buildx package fights with docker-buildx-plugin installed
+# later by the docker-outside-of-docker devcontainer feature; keep it out of the picture.
+RUN printf 'Package: docker-buildx\nPin: origin deb.debian.org\nPin-Priority: -1\n' \
+    > /etc/apt/preferences.d/no-debian-docker-buildx
+
 RUN apt-get update && apt-get install -y \
     apt-utils \
     apt-transport-https \

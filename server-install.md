@@ -47,11 +47,32 @@ Unrelated to the buildx error, `dpkg -l` shows ~110 packages in `iU` (unpacked, 
 
 ## Recommendation
 
-Leave the container as-is; both `docker buildx` and `task` are confirmed functional. If a cleaner long-term fix is wanted, pin Debian's Docker packages out of consideration in `Dockerfile.debian` so the conflict never occurs:
+Leave the container as-is; both `docker buildx` and `task` are confirmed functional.
+
+## Fix applied
+
+`Dockerfile.debian` now pins Debian's `docker-buildx` package (priority `-1`) before any
+`apt-get install` runs, so it's never selected as a candidate and the conflict with the
+`docker-outside-of-docker` feature's `docker-buildx-plugin` can no longer occur:
 
 ```dockerfile
-RUN printf 'Package: docker-buildx docker.io docker-cli docker-compose\nPin: origin deb.debian.org\nPin-Priority: -1\n' \
-    > /etc/apt/preferences.d/no-debian-docker
+RUN printf 'Package: docker-buildx\nPin: origin deb.debian.org\nPin-Priority: -1\n' \
+    > /etc/apt/preferences.d/no-debian-docker-buildx
 ```
 
-This is a cosmetic improvement (avoids the scary-looking error in build logs), not a functional bug fix.
+Only `docker-buildx` is pinned (not `docker.io`/`docker-cli`/`docker-compose`), because
+`scripts/server-install/server-install-common.sh` installs `docker.io`/`docker-cli` from
+Debian's repo on a real server — that install path must keep working unmodified. The
+pin only affects this devcontainer image; production servers are unaffected.
+
+**Rebuild the devcontainer** ("Dev Containers: Rebuild Container") for the fix to take effect.
+
+## If you still hit this error
+
+1. Confirm you're on an up-to-date devcontainer image (rebuild if the pin above isn't present yet).
+2. Run `docker buildx version` and `task --version` — if both work, the error is cosmetic; running
+   `sudo apt-get install -f` afterwards is safe to clear the dpkg error state (confirmed 2026-09-24:
+   it did not downgrade buildx or reintroduce the old `iU`-package pile).
+3. If `docker buildx version` reports the *old* Debian version (`0.13.x`) instead of the Docker-repo
+   one, something removed `docker-buildx-plugin` — reinstall via the devcontainer feature rebuild
+   rather than `apt install docker-buildx`.
