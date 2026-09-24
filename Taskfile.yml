@@ -9,3 +9,5 @@ tasks:
 includes:
   dev:
     taskfile: ./Taskfile.Development.yml
+  docker:
+    taskfile: ./Taskfile.Docker.yml

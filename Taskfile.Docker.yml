@@ -1,0 +1,37 @@
+version: '3'
+
+vars:
+  COMPOSE_CMD: docker compose --env-file env/app.env --env-file env/nginx.env --env-file env/letsencrypt.env --env-file env/bibleguessr/webapi.env --env-file .env -f docker-compose.yml -p bibleguessr-production
+  APP_VERSION: 0.0.1
+
+tasks:
+  docker:list-volumes:
+    desc: "List all Docker volumes"
+    cmds:
+    - docker volume ls
+
+  site:pull:
+    desc: "Pull the application images used by the app stack"
+    cmds:
+      - docker pull docker.io/isuperman/bibleguessr-nginx:{{ .APP_VERSION }}
+      - docker pull docker.io/isuperman/bibleguessr-api:{{ .APP_VERSION }}
+
+  site:down:
+    desc: "Stop the full app stack"
+    cmds:
+      - "{{.COMPOSE_CMD}} down"
+    interactive: true
+
+  site:up:
+    desc: "Start the full app stack"
+    deps: [nginx:generate-conf]
+    # deps: [preflight-check]
+    cmds:
+      - "{{.COMPOSE_CMD}} up -d"
+    interactive: true
+
+  nginx:generate-conf:
+    desc: "Generate nginx conf files from templates"
+    cmds:
+      - ./scripts/initialize-nginx-conf.sh
+    interactive: true
