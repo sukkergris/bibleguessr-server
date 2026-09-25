@@ -36,12 +36,20 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_BG}/privkey.pem;
     include includes/ssl-params.conf;
 
-    set $site_root /usr/share/nginx/html/bibleguessr;
+    set $web_api_upstream "http://bibleguessr-api:8080";
+
+    location /api/ {
+        limit_req zone=api_limit burst=20 nodelay;
+        limit_req_status 429;
+        include includes/proxy-webapi.conf;
+    }
+
+    set $site_root /usr/share/nginx/html;
 
     include includes/static-assets.conf;
 
     location / {
         root $site_root;
-        try_files $uri /index.html;
+        try_files $uri /index.html =404;
     }
 }
