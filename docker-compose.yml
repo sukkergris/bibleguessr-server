@@ -29,10 +29,22 @@ services:
       - ./env/bibleguessr/brevo.env
       - ./env/bibleguessr/webapi.env
       - ./env/app.env
+    volumes:
+      # Named volume (not a bind mount): a fresh volume inherits apiuser's
+      # (UID 1000) ownership from the image. The API unpacks the Bible archive here.
+      - bible-data:/data/bibles
     networks:
       - bibleguessr-prod
     restart: unless-stopped
 
+volumes:
+  bible-data:
+
 networks:
   bibleguessr-prod:
     driver: bridge
+    # Fixed subnet: the API trusts X-Forwarded-For only from this network
+    # (ForwardedHeadersOptions.KnownIPNetworks). Change both together.
+    ipam:
+      config:
+        - subnet: 10.201.0.0/24

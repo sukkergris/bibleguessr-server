@@ -36,9 +36,40 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_BG}/privkey.pem;
     include includes/ssl-params.conf;
 
-    set $web_api_upstream "http://bibleguessr-api:8080";
+    # API. ^~ stops the regex locations in static-assets.conf and tarpit.conf
+    # from matching API paths.
+    location ^~ /api/ {
+        limit_req zone=api_limit burst=20 nodelay;
+        limit_req_status 429;
+        add_header Cache-Control "no-cache" always;
+        include includes/proxy-webapi.conf;
 
-    location /api/ {
+        # These endpoints send email. limit_req is not inherited once a level
+        # sets its own, so api_limit is repeated here.
+        location ~ ^/api/(reports|abuse-reports|bug-reports)$ {
+            limit_req zone=api_limit burst=20 nodelay;
+            limit_req zone=report_limit burst=5 nodelay;
+            include includes/proxy-webapi.conf;
+        }
+    }
+
+    # Health checks: no rate limit, kept out of the access log.
+    location = /api/healthz {
+        access_log off;
+        add_header Cache-Control "no-cache" always;
+        include includes/proxy-webapi.conf;
+    }
+
+    # SignalR hub. The client only opens WebSockets here, so there is no
+    # per-request rate limit, and long timeouts keep idle games connected.
+    location ^~ /hubs/ {
+        include includes/proxy-webapi.conf;
+        include includes/proxy-websocket.conf;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location = /sitemap.xml {
         limit_req zone=api_limit burst=20 nodelay;
         limit_req_status 429;
         include includes/proxy-webapi.conf;
@@ -47,6 +78,15 @@ server {
     set $site_root /usr/share/nginx/html;
 
     include includes/static-assets.conf;
+
+    # Vite build output. File names are content-hashed, so they can be cached
+    # forever, and a missing chunk must 404 instead of getting index.html.
+    location ^~ /assets/ {
+        root $site_root;
+        try_files $uri =404;
+        expires max;
+        add_header Cache-Control "public, immutable";
+    }
 
     location / {
         root $site_root;

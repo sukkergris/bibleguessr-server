@@ -35,3 +35,9 @@ tasks:
     cmds:
       - ./scripts/initialize-nginx-conf.sh
     interactive: true
+
+  nginx:test:
+    desc: "Run the nginx routing test against a mock API (does not touch the running stack)"
+    deps: [nginx:generate-conf]
+    cmds:
+      - APP_VERSION={{ .APP_VERSION }} ./scripts/test/nginx-routing.sh
