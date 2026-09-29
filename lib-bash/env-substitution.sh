@@ -16,8 +16,8 @@ process_template() {
     ASSET_EXPIRES
     DOMAIN_KFK
     DOMAIN_CVP
-    DOMAIN_HVT
     DOMAIN_BG
+    DOMAIN_VW
   )
 
   local subst

@@ -37,3 +37,4 @@ setup::run() {
 }
 
 setup::run "bibleguessr.srv"
+setup::run "vault.bibleguessr.srv"

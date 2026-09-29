@@ -21,6 +21,7 @@ services:
     #   - yarp
     networks:
       - bibleguessr-prod
+      - vaultwarden
     restart: unless-stopped
 
   bibleguessr-api:
@@ -37,10 +38,29 @@ services:
       - bibleguessr-prod
     restart: unless-stopped
 
+  vaultwarden:
+    image: docker.io/vaultwarden/server:${VAULTWARDEN_VERSION:-latest}
+    # Kept in a subfolder: env/*.env are all sourced by process_templates, and
+    # vaultwarden's DOMAIN would clash with the one in env/nginx.env.
+    env_file:
+      - ./env/vaultwarden/vaultwarden.env
+    volumes:
+      - vaultwarden-data:/data
+    # No published ports: reached only through nginx.
+    networks:
+      - vaultwarden
+    restart: unless-stopped
+
 volumes:
   bible-data:
+  vaultwarden-data:
 
 networks:
+  # Separate from bibleguessr-prod so vaultwarden gets no address in the
+  # subnet the API trusts for X-Forwarded-For. Only nginx joins both.
+  vaultwarden:
+    driver: bridge
+
   bibleguessr-prod:
     driver: bridge
     # Fixed subnet: the API trusts X-Forwarded-For only from this network

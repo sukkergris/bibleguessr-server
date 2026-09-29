@@ -16,15 +16,15 @@ setup_certs() {
     printf 'Skipping setup_certs: running inside Docker container.\n'
     return 1
   fi
-  local domains=("bibleguessr.srv")
+  local domains=("bibleguessr.srv" "vault.bibleguessr.srv")
   local domain cert_file
 
   for domain in "${domains[@]}"; do
     cert_file="$(create_selfsigned_letsencrypt_files "${domain}")" || return 1
     trust_dev_cert "${cert_file}" "${domain}" || return 1
     add_domain_to_hostfile "${domain}"
-    add_domain_to_hostfile www."${domain}"
   done
+  add_domain_to_hostfile www.bibleguessr.srv
 }
 
 setup_certs || exit 1

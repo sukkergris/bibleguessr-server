@@ -105,6 +105,8 @@ NGINX_ENV="${ENV_DIR}/nginx.env"
 if [[ ! -f "${NGINX_ENV}" ]]; then
     cat > "${NGINX_ENV}" <<EOF
 DOMAIN=
+# Vaultwarden host name, e.g. vault.kforkode.dk (production) or vault.bibleguessr.srv (dev)
+DOMAIN_VW=
 
 # Optional nginx/runtime overrides
 # NGINX_HTTP_PORT=8080
@@ -141,6 +143,30 @@ EOF
     log::info "Created ${PRERENDER_ENV}"
 else
     log::info "${PRERENDER_ENV} already exists, skipping."
+fi
+
+VAULTWARDEN_ENV="${ENV_DIR}/vaultwarden/vaultwarden.env"
+if [[ ! -f "${VAULTWARDEN_ENV}" ]]; then
+    mkdir -p "$(dirname -- "${VAULTWARDEN_ENV}")"
+    cat > "${VAULTWARDEN_ENV}" <<EOF
+# Public URL, e.g. https://vault.example.com (required for attachments, WebAuthn, emails)
+DOMAIN=
+SIGNUPS_ALLOWED=false
+# Argon2 PHC string: docker run --rm -it vaultwarden/server /vaultwarden hash
+# Wrap it in single quotes so compose does not interpolate its \$ signs. Empty disables /admin.
+ADMIN_TOKEN=
+
+# Optional SMTP (invitations, 2FA emails)
+# SMTP_HOST=
+# SMTP_FROM=
+# SMTP_PORT=587
+# SMTP_SECURITY=starttls
+# SMTP_USERNAME=
+# SMTP_PASSWORD=
+EOF
+    log::info "Created ${VAULTWARDEN_ENV}"
+else
+    log::info "${VAULTWARDEN_ENV} already exists, skipping."
 fi
 
 log::ok "Environment files initialised in ${ENV_DIR}"

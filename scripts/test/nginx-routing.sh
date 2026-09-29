@@ -13,6 +13,7 @@ trap - ERR
 TEST_DIR="${SCRIPTS_DIR}/test"
 NGINX_IMAGE="${NGINX_IMAGE:-docker.io/isuperman/bibleguessr-nginx:${APP_VERSION:-0.0.1}}"
 DOMAIN="$(grep -E '^DOMAIN_BG=' "${PROJECT_ROOT}/env/nginx.env" | tail -n1 | cut -d'=' -f2-)"
+VAULT_DOMAIN="$(grep -E '^DOMAIN_VW=' "${PROJECT_ROOT}/env/nginx.env" | tail -n1 | cut -d'=' -f2-)"
 NET=bg-routing-test
 SUT=bg-routing-sut
 API=bg-routing-api
@@ -28,7 +29,8 @@ cleanup() {
 # docker cp instead of bind mounts, so this also works with Docker-outside-of-Docker.
 start_containers() {
     docker network create "$NET" >/dev/null
-    docker create --name "$API" --network "$NET" --network-alias bibleguessr-api nginx:1.31.6-alpine >/dev/null
+    docker create --name "$API" --network "$NET" --network-alias bibleguessr-api --network-alias vaultwarden \
+        nginx:1.31.6-alpine >/dev/null
     docker cp "${TEST_DIR}/mock-api.conf" "$API:/etc/nginx/conf.d/default.conf"
     docker start "$API" >/dev/null
 
@@ -42,7 +44,10 @@ start_containers() {
     sleep 1
 }
 
-req() { docker exec "$CLI" curl -sk --http1.1 --connect-to "${DOMAIN}:443:${SUT}:443" "$@"; }
+req() {
+    docker exec "$CLI" curl -sk --http1.1 \
+        --connect-to "${DOMAIN}:443:${SUT}:443" --connect-to "${VAULT_DOMAIN}:443:${SUT}:443" "$@"
+}
 code() { req -o /dev/null -w '%{http_code}' "$@"; }
 headers() { req -D - -o /dev/null "$@" | tr '[:upper:]' '[:lower:]'; }
 
@@ -65,7 +70,7 @@ absent_in_logs() {
 }
 
 main() {
-    local base="https://${DOMAIN}" codes asset i client_ip
+    local base="https://${DOMAIN}" vault codes asset i client_ip
     cleanup
     trap cleanup EXIT
     start_containers
@@ -115,10 +120,32 @@ main() {
     for i in $(seq 1 25); do codes+="$(code "$base/api/rooms") "; done
     check "api limit eventually returns 429" "429" "$codes"
 
+    # Vaultwarden
+    vault="https://${VAULT_DOMAIN}"
+    check "vault goes to vaultwarden"        "port=80" "$(req "$vault/")"
+    check "vault keeps path and query"       "uri=/api/sync?excludeDomains=true " \
+        "$(req "$vault/api/sync?excludeDomains=true")"
+    check "/api/ on main site not vaultwarden" "port=8080" "$(req "$base/api/books")"
+    check "vault HTTP redirects to HTTPS"    "301" \
+        "$(docker exec "$CLI" curl -s -o /dev/null -w '%{http_code}' -H "Host: ${VAULT_DOMAIN}" "http://${SUT}/")"
+    check "vault forwards WebSocket Upgrade" "upgrade=websocket connection=upgrade" \
+        "$(req -H 'Upgrade: websocket' -H 'Connection: Upgrade' "$vault/notifications/hub")"
+    check "vault X-Forwarded-For not spoofable" "xff=${client_ip} " \
+        "$(req -H 'X-Forwarded-For: 6.6.6.6' "$vault/api/sync")"
+    check "vault accepts large attachments"  "200" \
+        "$(docker exec "$CLI" sh -c "head -c 5000000 /dev/zero | curl -sk --http1.1 -o /dev/null -w '%{http_code}' \
+            --connect-to '${VAULT_DOMAIN}:443:${SUT}:443' --data-binary @- '$vault/api/ciphers/x/attachment/v2'")"
+    req "$vault/notifications/hub?access_token=SECRETTOKEN" >/dev/null
+    codes=""
+    for i in $(seq 1 13); do codes+="$(code -X POST -d 'password=SECRETPASSWORD' "$vault/identity/connect/token") "; done
+    check "vault login: 11 allowed, then 429" "$(printf '200 %.0s' $(seq 1 11))429 429 " "$codes"
+
     # Logs
     check "request body never logged"        "absent" "$(absent_in_logs SECRETBODY)"
     check "healthz not logged"               "absent" "$(absent_in_logs /api/healthz)"
     check "no redirection cycle"             "absent" "$(absent_in_logs 'redirection cycle')"
+    check "vault query string never logged"  "absent" "$(absent_in_logs SECRETTOKEN)"
+    check "vault login body never logged"    "absent" "$(absent_in_logs SECRETPASSWORD)"
 
     if [[ $fail -eq 0 ]]; then
         log::ok "$pass/$((pass + fail)) checks passed"
