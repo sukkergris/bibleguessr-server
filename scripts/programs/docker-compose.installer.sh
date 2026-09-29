@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Docker Compose v2 CLI plugin installer for ARM64 Linux (Ubuntu 24.04+)
 set -Eeuo pipefail
 

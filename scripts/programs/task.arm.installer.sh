@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Task (Go-Task) installer for ARM64 Linux (Ubuntu 24.04+)
 set -u
 

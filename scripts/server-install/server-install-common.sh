@@ -11,7 +11,6 @@ apt install -y \
   curl \
   gpg \
   gettext \
-  neovim \
   stow \
   tree \
   docker.io \
@@ -20,6 +19,8 @@ apt install -y \
   openssh-server
 
 "$(dirname "$0")/../programs/task.arm.installer.sh"
+
+"$(dirname "$0")/../programs/neovim.installer.sh"
 
 # Initialize environment variable files for all services
 "$(dirname "$0")/../env-init.sh"
