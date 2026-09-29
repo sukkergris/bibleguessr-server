@@ -13,10 +13,11 @@
   },
   "remoteUser": "root",
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/root/.sshtemplate,type=bind,readonly,consistency=cached",
     "source=claude-${localWorkspaceFolderBasename},target=/root/.claude,type=volume",
+    "source=continue-${localWorkspaceFolderBasename},target=/root/.continue,type=volume",
     "source=gemini-${localWorkspaceFolderBasename},target=/root/.gemini,type=volume",
-    "source=continue-${localWorkspaceFolderBasename},target=/root/.continue,type=volume"
+    "source=gh-${localWorkspaceFolderBasename},target=/root/.gh,type=volume",
+    "source=${localEnv:HOME}/.ssh,target=/root/.sshtemplate,type=bind,readonly,consistency=cached"
   ],
   "postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/host-replica/post-container-install.sh",
   "workspaceMount": "source=${localWorkspaceFolder},target=/xyz,type=bind",

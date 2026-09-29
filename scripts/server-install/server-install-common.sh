@@ -13,6 +13,7 @@ apt install -y \
   gettext \
   stow \
   tree \
+  build-essential \
   docker.io \
   docker-cli \
   certbot \

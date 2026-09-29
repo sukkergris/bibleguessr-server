@@ -7,6 +7,10 @@ export NVM_DIR="$HOME/.nvm"
 
 dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+# The workspace mount is often owned by a different UID than container-user,
+# which makes git refuse to operate on it ("detected dubious ownership").
+git config --global --add safe.directory /xyz
+
 SCRIPTS_DIR="${dir}/../scripts"
 
 COPY_SSH_SCRIPT="$SCRIPTS_DIR/copy-ssh-files.sh"
