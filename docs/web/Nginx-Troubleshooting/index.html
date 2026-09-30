@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>nginx troubleshooting</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main>
+  <p><a href="../index.html">← Overview</a></p>
+  <h1>nginx troubleshooting</h1>
+  <p class="lead">Cheat sheet for when nginx in production is down, restarting, or answering with errors. Work top to bottom. Run everything from the project root on the server.</p>
+
+  <nav>
+    <ul>
+      <li><a href="#triage">1. Triage: is it running?</a></li>
+      <li><a href="#logs">2. Read the error</a></li>
+      <li><a href="#errors">3. Common errors</a></li>
+      <li><a href="#test">4. Test the config without downtime</a></li>
+      <li><a href="#certs">5. Certificates</a></li>
+      <li><a href="#generated">6. Generated config</a></li>
+      <li><a href="#ports">7. Ports 80/443</a></li>
+      <li><a href="#http">8. nginx is up, but requests fail</a></li>
+      <li><a href="#recover">9. Recover</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="triage">1. Triage: is it running?</h2>
+  <pre><code>docker ps -a --filter name=bibleguessr-production --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+# bibleguessr-production-nginx-1   Restarting (1) 4 seconds ago   isuperman/bibleguessr-nginx:0.0.4</code></pre>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Status</th><th>Meaning</th><th>Go to</th></tr>
+    <tr><td><code>Restarting (1)</code></td><td>nginx refuses the config at startup and <code>restart: unless-stopped</code> loops it</td><td><a href="#logs">2</a></td></tr>
+    <tr><td><code>Exited</code> / missing</td><td>Stopped, or <code>compose up</code> failed before start (ports, env, image)</td><td><a href="#ports">7</a>, <a href="#recover">9</a></td></tr>
+    <tr><td><code>Up</code></td><td>nginx runs; the problem is routing, certs or the API</td><td><a href="#http">8</a></td></tr>
+  </table>
+  </div>
+  <p>Restart count and last exit code:</p>
+  <pre><code>docker inspect -f '{{.RestartCount}} restarts, exit {{.State.ExitCode}}' bibleguessr-production-nginx-1</code></pre>
+
+  <h2 id="logs">2. Read the error</h2>
+  <p>nginx writes startup errors to stderr, so they are in the container log. Look for <code>[emerg]</code>.</p>
+  <pre><code>docker logs --tail 50 bibleguessr-production-nginx-1 2&gt;&amp;1 | grep -E 'emerg|alert|crit|error'
+# nginx: [emerg] cannot load certificate "/etc/letsencrypt/live/bibleguessr.uk/fullchain.pem" ...</code></pre>
+  <p>Follow live traffic and errors:</p>
+  <pre><code>docker logs -f --since 5m bibleguessr-production-nginx-1</code></pre>
+
+  <h2 id="errors">3. Common errors</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Log message</th><th>Likely cause</th><th>Fix</th></tr>
+    <tr>
+      <td><code>cannot load certificate "/etc/letsencrypt/live/&lt;domain&gt;/fullchain.pem" … No such file</code></td>
+      <td>No cert for that domain, <code>DOMAIN_BG</code>/<code>DOMAIN_VW</code> does not match the cert name, or a stale <code>.conf</code> with dev domains (<code>bibleguessr.srv</code>)</td>
+      <td><a href="#certs">5</a> and <a href="#generated">6</a></td>
+    </tr>
+    <tr>
+      <td><code>unknown "domain_bg" variable</code></td>
+      <td>A <code>${VAR}</code> was not substituted: missing from <code>env/*.env</code> or from the whitelist in <code>lib-bash/env-substitution.sh</code></td>
+      <td><a href="#generated">6</a></td>
+    </tr>
+    <tr>
+      <td><code>open() "/etc/nginx/nginx.conf" failed (2: No such file or directory)</code></td>
+      <td><code>NGINX_DIR</code> in <code>.env</code> points to the wrong folder, so an empty dir is mounted over <code>/etc/nginx</code></td>
+      <td>Fix <code>NGINX_DIR</code> in <code>.env</code> (and <code>env/nginx.env</code>), then <code>task docker:site:up</code></td>
+    </tr>
+    <tr>
+      <td><code>unexpected "}"</code>, <code>unexpected end of file</code>, <code>directive "x" is not terminated by ";"</code></td>
+      <td>Syntax error. The log names file and line</td>
+      <td>Fix the <code>.conf.template</code> or include, then <a href="#test">4</a></td>
+    </tr>
+    <tr>
+      <td><code>zero size shared memory zone "api_limit"</code></td>
+      <td><code>limit_req</code> used, but <code>includes/rate-limiting.conf</code> not loaded</td>
+      <td>Check the includes in <code>includes/http-globals.conf</code></td>
+    </tr>
+    <tr>
+      <td><code>host not found in upstream "…"</code></td>
+      <td>A <code>proxy_pass</code> with a literal host name. nginx resolves those at startup and dies if the container is down</td>
+      <td>Use the variables in <code>includes/upstreams.conf</code> (<code>$api_upstream</code>)</td>
+    </tr>
+    <tr>
+      <td>(compose) <code>Bind for 0.0.0.0:80 failed: port is already allocated</code></td>
+      <td>Another process holds 80/443, often the temporary ACME nginx</td>
+      <td><a href="#ports">7</a></td>
+    </tr>
+    <tr>
+      <td>(compose) <code>VERSION must be set</code> / <code>manifest unknown</code></td>
+      <td><code>VERSION</code> missing in <code>env/app.env</code>/<code>.env</code>, or the tag is not pushed to Docker Hub</td>
+      <td>Set a published tag, <code>task docker:site:pull</code></td>
+    </tr>
+  </table>
+  </div>
+
+  <h2 id="test">4. Test the config without downtime</h2>
+  <p>Container is <strong>up</strong>: test what is on disk, reload only if it passes. A failed reload keeps the old config running.</p>
+  <pre><code>docker exec bibleguessr-production-nginx-1 nginx -t &amp;&amp; \
+docker exec bibleguessr-production-nginx-1 nginx -s reload
+# nginx: configuration file /etc/nginx/nginx.conf test is successful</code></pre>
+  <p>Container is <strong>down or looping</strong>: run <code>nginx -t</code> in a one-off container with the same mounts. <code>compose run</code> publishes no ports, so it does not clash with anything.</p>
+  <pre><code>docker compose --env-file env/app.env --env-file env/nginx.env --env-file env/letsencrypt.env \
+  --env-file .env -p bibleguessr-production run --rm --no-deps nginx nginx -t</code></pre>
+  <p>Dump the full effective config (all includes merged):</p>
+  <pre><code>docker exec bibleguessr-production-nginx-1 nginx -T | less</code></pre>
+  <p>Routing regressions: <code>task docker:nginx:test</code> runs the config against a mock API and never touches the running stack.</p>
+
+  <h2 id="certs">5. Certificates</h2>
+  <p>Every <code>ssl_certificate</code> path must exist, or nginx will not start at all, for any site.</p>
+  <pre><code># Which certs does the config expect?
+grep -h ssl_certificate nginx/conf.d/*.conf
+
+# Which certs exist?
+sudo ls /etc/letsencrypt/live/
+# bibleguessr.uk  kforkode.dk  vault.kforkode.dk  README
+
+task letsencrypt:certbot:5-verify-certs</code></pre>
+  <p>Expiry date and names on a cert:</p>
+  <pre><code>sudo openssl x509 -in /etc/letsencrypt/live/bibleguessr.uk/fullchain.pem -noout -enddate -ext subjectAltName
+# notAfter=Dec 28 10:12:00 2026 GMT
+# DNS:bibleguessr.uk, DNS:www.bibleguessr.uk</code></pre>
+  <p>What the server actually serves:</p>
+  <pre><code>echo | openssl s_client -connect 127.0.0.1:443 -servername bibleguessr.uk 2&gt;/dev/null \
+  | openssl x509 -noout -subject -enddate</code></pre>
+  <p class="warn">The folder name under <code>live/</code> is what counts, and it must equal <code>DOMAIN_BG</code> / <code>DOMAIN_VW</code> in <code>env/nginx.env</code>. A cert issued with <code>-d bibleguessr.uk</code> lives in <code>live/bibleguessr.uk/</code>. Reissuing can create <code>live/bibleguessr.uk-0001/</code>, which nginx will not find.</p>
+
+  <h2 id="generated">6. Generated config</h2>
+  <p>nginx reads <code>nginx/conf.d/*.conf</code>, which is rendered from <code>*.conf.template</code>. Some generated files are tracked in git with <strong>dev domains</strong>, so a <code>git pull</code>, <code>git checkout</code> or a plain <code>docker compose up</code> (skipping the task) can leave nginx with <code>bibleguessr.srv</code> cert paths.</p>
+  <pre><code># Are the generated files the dev versions from git?
+git status --short nginx/
+grep -h server_name nginx/conf.d/2*.conf nginx/conf.d/3*.conf
+# server_name bibleguessr.uk www.bibleguessr.uk;   ← good
+# server_name bibleguessr.srv www.bibleguessr.srv; ← stale, regenerate
+
+# Any variable left unsubstituted?
+grep -n '\${' nginx/conf.d/*.conf
+
+# Values used for substitution
+grep -E '^DOMAIN_(BG|VW)=' env/*.env</code></pre>
+  <p>Regenerate and restart (always through the task, which renders the templates first):</p>
+  <pre><code>task docker:nginx:generate-conf
+task docker:site:up</code></pre>
+
+  <h2 id="ports">7. Ports 80/443</h2>
+  <pre><code>sudo ss -ltnp '( sport = :80 or sport = :443 )'
+docker ps --filter publish=80 --filter publish=443 --format '{{.Names}}'
+# nginx-nginx-1   ← the temporary ACME nginx from initialize-certs/</code></pre>
+  <p>Stop the ACME nginx after issuing certs, then start the stack:</p>
+  <pre><code>task letsencrypt:acme:6-nginx-down
+task docker:site:up</code></pre>
+
+  <h2 id="http">8. nginx is up, but requests fail</h2>
+  <p>Test from the server itself, bypassing DNS:</p>
+  <pre><code>curl -sk -o /dev/null -w '%{http_code}\n' \
+  --resolve bibleguessr.uk:443:127.0.0.1 https://bibleguessr.uk/api/healthz
+# 200</code></pre>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Symptom</th><th>Cause</th><th>Check</th></tr>
+    <tr><td>Connection closed, no response (<code>444</code>)</td><td>Host name matches no <code>server_name</code>, so the catch-all in <code>00-globals.conf</code> drops it</td><td><code>grep server_name nginx/conf.d/*.conf</code> vs. the domain you call</td></tr>
+    <tr><td><code>502 Bad Gateway</code> on <code>/api/</code>, <code>/hubs/</code></td><td>API container down or crashing</td><td><code>docker logs --tail 50 bibleguessr-production-bibleguessr-api-1</code></td></tr>
+    <tr><td><code>502</code> on the vault host</td><td>Vaultwarden down</td><td><code>docker logs --tail 50 bibleguessr-production-vaultwarden-1</code></td></tr>
+    <tr><td><code>504 Gateway Timeout</code></td><td>API is slow or hanging</td><td><code>docker stats --no-stream</code></td></tr>
+    <tr><td><code>429 Too Many Requests</code></td><td><code>api_limit</code> / <code>report_limit</code> hit</td><td><code>docker logs bibleguessr-production-nginx-1 2&gt;&amp;1 | grep 'limiting requests'</code></td></tr>
+    <tr><td>Browser cert warning</td><td>Dummy cert served (catch-all) or expired cert</td><td><a href="#certs">5</a>, <code>openssl s_client</code></td></tr>
+    <tr><td><code>404</code> on <code>/assets/…</code></td><td>Old <code>index.html</code> cached; references chunks from a previous build</td><td>Hard reload; check image tag</td></tr>
+  </table>
+  </div>
+  <p>Can nginx reach the API over the Docker network?</p>
+  <pre><code>docker exec bibleguessr-production-nginx-1 wget -qO- http://bibleguessr-api:8080/api/healthz
+# Healthy</code></pre>
+  <p>Top status codes and client IPs in the last 10 minutes:</p>
+  <pre><code>docker logs --since 10m bibleguessr-production-nginx-1 2&gt;/dev/null | awk '{print $9}' | sort | uniq -c | sort -rn | head
+docker logs --since 10m bibleguessr-production-nginx-1 2&gt;/dev/null | awk '{print $1}' | sort | uniq -c | sort -rn | head</code></pre>
+  <p>Field positions depend on the <code>realip</code> format in <code>includes/log-formats.conf</code>. Adjust <code>$9</code>/<code>$1</code> if needed.</p>
+
+  <h2 id="recover">9. Recover</h2>
+  <ol>
+    <li>Read the <code>[emerg]</code> line (<a href="#logs">2</a>).</li>
+    <li>Fix the template, env file or cert. Never hand-edit a generated <code>.conf</code>.</li>
+    <li><code>task docker:nginx:generate-conf</code></li>
+    <li>Test with <code>compose run … nginx -t</code> (<a href="#test">4</a>).</li>
+    <li><code>task docker:site:up</code></li>
+    <li>Verify: <code>docker ps</code> shows <code>Up</code>, and the <code>curl</code> in <a href="#http">8</a> returns <code>200</code>.</li>
+  </ol>
+  <p>Roll back to the last working config if you are stuck:</p>
+  <pre><code>git log --oneline -5 -- nginx/
+git diff HEAD~1 -- nginx/          # what changed?
+git checkout &lt;good-commit&gt; -- nginx/includes nginx/conf.d/*.template
+task docker:site:up</code></pre>
+  <p class="warn">Do not <code>git checkout</code> the generated <code>conf.d/*.conf</code> files on the server. They contain dev domains. Always regenerate them.</p>
+</main>
+</body>
+</html>
