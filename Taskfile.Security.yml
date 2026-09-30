@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  nginx:
+    cmds: 
+      - journalctl CONTAINER_NAME= bibleguessr-production-nginx-1 --since "1 hour ago"
+  nginx:ips:
+    cmds:
+      - journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 -o cat --since "1 hour ago" | awk '{print $1}' | sort -u

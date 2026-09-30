@@ -13,3 +13,5 @@ includes:
     taskfile: ./Taskfile.Docker.yml
   letsencrypt:
     taskfile: ./Taskfile.Letsencrypt.yml
+  security:
+    taskfile: ./Taskfile.Security.yml
