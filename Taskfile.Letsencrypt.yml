@@ -1,13 +1,83 @@
 version: '3'
-
+# Automatic Certificate Management Environment (acme)
 tasks:
-  bootstrap:
-    desc: Bootstrap app for securing cert's pre ssh (using http first)
+  acme:1-nginx-up:
+    desc: "(1) Start the temporary port-80 nginx used only for the Let's Encrypt HTTP-01 challenge"
     dir: ./initialize-certs/nginx/
     cmds:
       - docker compose -f docker-compose.letsencrypt.yml up -d
-  down:
-    desc: Take down bootstrap app
+
+  acme:2-nginx-test:
+    desc: "(2) Test ACME challenge path using Host header for bibleguessr.uk (pass a domain as CLI_ARGS to override)"
+    cmds:
+      - ./scripts/certs/acme-nginx-test.sh {{.CLI_ARGS}}
+    interactive: true
+
+  certbot:dry-run:3-all:
+    desc: "(3) Dry run for all configured sites"
+    cmds:
+      - task certbot:dry-run:3.1-kfk
+      - task certbot:dry-run:3.2-vault.kfk
+      - task certbot:dry-run:3.3-bibgssr
+    interactive: true
+
+  certbot:dry-run:3.1-kfk:
+    desc: "(3.1) Dry run for kforkode.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d kforkode.dk -d www.kforkode.dk --dry-run
+    interactive: true
+
+  certbot:dry-run:3.2-vault.kfk:
+    desc: "(3.2) Dry run for vault.kforkode.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d vault.kforkode.dk -d www.vault.kforkode.dk --dry-run
+    interactive: true
+
+  certbot:dry-run:3.3-bibgssr:
+    desc: "(3.3) Dry run for bibleguessr.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d bibleguessr.dk -d www.bibleguessr.dk --dry-run
+    interactive: true
+
+  certbot:issue:4-all:
+    desc: "(4) Issue certificates for all configured sites"
+    cmds:
+      - task certbot:kfk
+      - task certbot:vault.kfk
+      - task certbot:bibgssr
+    interactive: true
+
+  certbot:issue:4.1-kfk:
+    desc: "(4.1) Dry run for kforkode.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d kforkode.dk -d www.kforkode.dk 
+    interactive: true
+
+  certbot:issue:4.2-vault.kfk:
+    desc: "(4.2) Dry run for vault.kforkode.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d vault.kforkode.dk -d www.vault.kforkode.dk
+    interactive: true
+
+  certbot:issue:4.3-bibgssr:
+    desc: "(4.3) Dry run for bibleguessr.dk (+ www)"
+    cmds:
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d bibleguessr.dk -d www.bibleguessr.dk
+    interactive: true
+
+  certbot:5-verify-certs:
+    desc: "(5) Verify issued certificates exist for all configured sites"
+    cmds:
+      - ./scripts/certs/certbot-verify.sh
+    interactive: true
+
+  acme:6-nginx-down:
+    desc: "(6) Stop the temporary ACME nginx container"
     dir: ./initialize-certs/nginx/
     cmds:
       - docker compose -f docker-compose.letsencrypt.yml down
+
+  7-issue-dummy-cert:
+    desc: "(7) Issue a dummy self-signed certificate for nginx to use before real certs are issued"
+    cmds:
+      - ./initialize-certs/issue-dummy-certs.sh
