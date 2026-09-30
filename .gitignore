@@ -323,3 +323,5 @@ scripts/programs/.docker-compose.installer.sh.swp
 backup/squidex/hvt/production/*
 backup/squidex/hvt/local.env
 backup/squidex/hvt/production.env
+nginx/conf.d/20-bibleguessr.conf
+nginx/conf.d/30-vaultwarden.conf

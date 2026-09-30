@@ -12,13 +12,13 @@ services:
       - ${LETSENCRYPT_CHALLENGES_DIR:?LETSENCRYPT_CHALLENGES_DIR must be set (load env/letsencrypt.env)}:/var/www/letsencrypt_challenges
       - ${LETSENCRYPT_DIR:?LETSENCRYPT_DIR must be set (load env/letsencrypt.env)}:/etc/letsencrypt:ro
       - ${NGINX_DIR:?NGINX_DIR must be set (load env/nginx.env)}:/etc/nginx
-    env_file:
-      - ./env/nginx.env
-      - ./env/app.env
-      - ./env/letsencrypt.env
-    # depends_on:
-    #   - web-api
-    #   - yarp
+    # env_file:
+    #   - ./env/nginx.env
+    #   - ./env/app.env
+    #   - ./env/letsencrypt.env
+    # # depends_on:
+    # #   - web-api
+    # #   - yarp
     networks:
       - bibleguessr-prod
       - vaultwarden
@@ -39,6 +39,8 @@ services:
     restart: unless-stopped
 
   vaultwarden:
+    depends_on:
+      - nginx
     image: docker.io/vaultwarden/server:${VAULTWARDEN_VERSION:-latest}
     # Kept in a subfolder: env/*.env are all sourced by process_templates, and
     # vaultwarden's DOMAIN would clash with the one in env/nginx.env.
