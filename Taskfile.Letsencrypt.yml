@@ -42,9 +42,9 @@ tasks:
   certbot:issue:4-all:
     desc: "(4) Issue certificates for all configured sites"
     cmds:
-      - task: certbot:kfk
-      - task: certbot:vault.kfk
-      - task: certbot:bibgssr
+      - task: certbot:issue:4.1-kfk
+      - task: certbot:issue:4.2-vault.kfk
+      - task: certbot:issue:4.3-bibgssr
     interactive: true
 
   certbot:issue:4.1-kfk:
@@ -60,9 +60,9 @@ tasks:
     interactive: true
 
   certbot:issue:4.3-bibgssr:
-    desc: "(4.3) Dry run for bibleguessr.dk (+ www)"
+    desc: "(4.3) Dry run for bibleguessr.uk (+ www)"
     cmds:
-      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d bibleguessr.dk -d www.bibleguessr.dk
+      - sudo certbot certonly --webroot -w /var/www/letsencrypt_challenges -d bibleguessr.uk -d www.bibleguessr.uk
     interactive: true
 
   certbot:5-verify-certs:
