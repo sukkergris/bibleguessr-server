@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="da">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,97 +8,97 @@
 </head>
 <body>
 <main>
-  <p><a href="../index.html">← Oversigt</a></p>
+  <p><a href="../index.html">← Overview</a></p>
   <h1>Vaultwarden</h1>
-  <p class="lead">Selvhostet Bitwarden-server. Kører bag nginx på sit eget host-navn og bruges med de almindelige Bitwarden-klienter.</p>
+  <p class="lead">Self-hosted Bitwarden server. Runs behind nginx on its own host name and is used with the regular Bitwarden clients.</p>
 
   <nav>
     <ul>
-      <li><a href="#start">Start og tjek</a></li>
-      <li><a href="#konfiguration">Konfiguration</a></li>
-      <li><a href="#admin">Admin-panel</a></li>
-      <li><a href="#brugere">Opret brugere</a></li>
-      <li><a href="#klienter">Klienter</a></li>
-      <li><a href="#test">Test</a></li>
-      <li><a href="#faldgruber">Faldgruber</a></li>
+      <li><a href="#start">Start and check</a></li>
+      <li><a href="#configuration">Configuration</a></li>
+      <li><a href="#admin">Admin panel</a></li>
+      <li><a href="#users">Create users</a></li>
+      <li><a href="#clients">Clients</a></li>
+      <li><a href="#test">Testing</a></li>
+      <li><a href="#pitfalls">Pitfalls</a></li>
     </ul>
   </nav>
 
-  <h2 id="start">Start og tjek</h2>
-  <p>Vaultwarden starter sammen med resten af stakken. Den har ingen porte udadtil og nås kun gennem nginx.</p>
+  <h2 id="start">Start and check</h2>
+  <p>Vaultwarden starts with the rest of the stack. It publishes no ports and is reachable only through nginx.</p>
   <pre><code>task docker:site:up
 curl https://vault.bibleguessr.srv/alive
 # "2026-09-29T20:14:02.113Z"</code></pre>
   <p>Logs:</p>
   <pre><code>docker logs -f bibleguessr-production-vaultwarden-1</code></pre>
 
-  <h2 id="konfiguration">Konfiguration</h2>
-  <p>To filer, oprettet af <code>scripts/env-init.sh</code>:</p>
+  <h2 id="configuration">Configuration</h2>
+  <p>Two files, created by <code>scripts/env-init.sh</code>:</p>
   <div class="table-wrap">
   <table>
-    <tr><th>Fil</th><th>Variabel</th><th>Eksempel</th></tr>
+    <tr><th>File</th><th>Variable</th><th>Example</th></tr>
     <tr><td><code>env/nginx.env</code></td><td><code>DOMAIN_VW</code></td><td><code>vault.bibleguessr.srv</code></td></tr>
     <tr><td rowspan="3"><code>env/vaultwarden/vaultwarden.env</code></td><td><code>DOMAIN</code></td><td><code>https://vault.bibleguessr.srv</code></td></tr>
     <tr><td><code>SIGNUPS_ALLOWED</code></td><td><code>false</code></td></tr>
-    <tr><td><code>ADMIN_TOKEN</code></td><td><code>'$argon2id$v=19$…'</code> (tom = <code>/admin</code> lukket)</td></tr>
+    <tr><td><code>ADMIN_TOKEN</code></td><td><code>'$argon2id$v=19$…'</code> (empty = <code>/admin</code> disabled)</td></tr>
   </table>
   </div>
-  <p>Efter en ændring i env-filen skal containeren <strong>genskabes</strong>. <code>docker restart</code> læser ikke filen igen.</p>
+  <p>After changing the env file, the container must be <strong>recreated</strong>. <code>docker restart</code> does not reread the file.</p>
   <pre><code>task docker:site:up
 docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \
   bibleguessr-production-vaultwarden-1 | grep SIGNUPS
 # SIGNUPS_ALLOWED=false</code></pre>
 
-  <h2 id="admin">Admin-panel</h2>
-  <p>1. Lav en hash af et langt, tilfældigt password:</p>
+  <h2 id="admin">Admin panel</h2>
+  <p>1. Hash a long, random password:</p>
   <pre><code>docker exec -it bibleguessr-production-vaultwarden-1 /vaultwarden hash
 # ADMIN_TOKEN='$argon2id$v=19$m=65540,t=3,p=4$...'</code></pre>
-  <p>2. Sæt hele linjen ind i <code>env/vaultwarden/vaultwarden.env</code>, <strong>med de enkelte anførselstegn</strong>, og kør <code>task docker:site:up</code>.</p>
-  <p>3. Åbn <code>https://vault.bibleguessr.srv/admin</code> og log ind med <strong>passwordet</strong>, ikke hashen.</p>
+  <p>2. Paste the whole line into <code>env/vaultwarden/vaultwarden.env</code>, <strong>keeping the single quotes</strong>, and run <code>task docker:site:up</code>.</p>
+  <p>3. Open <code>https://vault.bibleguessr.srv/admin</code> and log in with the <strong>password</strong>, not the hash.</p>
 
-  <h2 id="brugere">Opret brugere</h2>
-  <p>Admin kan ikke sætte en brugers password. Master-passwordet laves altid på klienten, fordi det er det, der krypterer vaulten. Du inviterer i stedet mailadressen, og brugeren opretter selv kontoen.</p>
-  <p>Eksempel uden SMTP:</p>
+  <h2 id="users">Create users</h2>
+  <p>An admin cannot set a user's password. The master password is always created in the client, because it is what encrypts the vault. Instead, you invite the email address and the user creates the account.</p>
+  <p>Example without SMTP:</p>
   <ol>
-    <li><code>/admin</code> → <em>Users</em> → <em>Invite User</em> → <code>theodor@example.dk</code></li>
-    <li>Åbn <code>https://vault.bibleguessr.srv</code> → <em>Create account</em> med <strong>præcis</strong> <code>theodor@example.dk</code></li>
-    <li>Vælg master-password. Kontoen er aktiv, selvom <code>SIGNUPS_ALLOWED=false</code>.</li>
+    <li><code>/admin</code> → <em>Users</em> → <em>Invite User</em> → <code>theodor@example.com</code></li>
+    <li>Open <code>https://vault.bibleguessr.srv</code> → <em>Create account</em> with <strong>exactly</strong> <code>theodor@example.com</code></li>
+    <li>Choose a master password. The account is active even though <code>SIGNUPS_ALLOWED=false</code>.</li>
   </ol>
-  <p class="warn">Master-passwordet kan ikke nulstilles. Glemmer du det, er vaulten tabt.</p>
+  <p class="warn">The master password cannot be reset. If you forget it, the vault is lost.</p>
 
-  <h2 id="klienter">Klienter</h2>
-  <p>Brug de officielle Bitwarden-klienter (browserudvidelse, desktop, mobil). Vælg <em>Self-hosted</em> på login-skærmen:</p>
+  <h2 id="clients">Clients</h2>
+  <p>Use the official Bitwarden clients (browser extension, desktop, mobile). Choose <em>Self-hosted</em> on the login screen:</p>
   <pre><code>Server URL: https://vault.bibleguessr.srv</code></pre>
-  <p>Mobil virker kun mod produktionsdomænet. Telefonen kan ikke slå <code>.srv</code> op og stoler ikke på dev-certifikatet.</p>
+  <p>Mobile works only against the production domain. The phone cannot resolve <code>.srv</code> and does not trust the dev certificate.</p>
 
-  <h2 id="test">Test</h2>
-  <p>Routing-testen kører nginx-configen mod en mock. Den dækker host-navn, HTTP→HTTPS, WebSocket, <code>X-Forwarded-For</code>, store vedhæftninger, login-rate-limit og at tokens ikke logges.</p>
+  <h2 id="test">Testing</h2>
+  <p>The routing test runs the nginx config against a mock. It covers the host name, HTTP→HTTPS, WebSocket, <code>X-Forwarded-For</code>, large attachments, the login rate limit, and that tokens are never logged.</p>
   <pre><code>task docker:nginx:test</code></pre>
-  <p>Manuelt: ret et element i web-vaulten. Opdateres det med det samme i browserudvidelsen, virker live-sync over WebSocket.</p>
+  <p>Manually: edit an item in the web vault. If it updates immediately in the browser extension, live sync over WebSocket works.</p>
 
-  <h2 id="faldgruber">Faldgruber</h2>
+  <h2 id="pitfalls">Pitfalls</h2>
   <div class="table-wrap">
   <table>
-    <tr><th>Symptom</th><th>Årsag og løsning</th></tr>
+    <tr><th>Symptom</th><th>Cause and fix</th></tr>
     <tr>
       <td><code>Registration not allowed or user already exists</code></td>
-      <td>Oprettelse er slået fra. Invitér mailen via <code>/admin</code>, eller sæt midlertidigt <code>SIGNUPS_ALLOWED=true</code> og genskab containeren.</td>
+      <td>Signups are disabled. Invite the email via <code>/admin</code>, or temporarily set <code>SIGNUPS_ALLOWED=true</code> and recreate the container.</td>
     </tr>
     <tr>
       <td><code>ADMIN_TOKEN is enabled but has an empty value</code></td>
-      <td>Forventet, når <code>ADMIN_TOKEN</code> er tom. <code>/admin</code> er så lukket.</td>
+      <td>Expected when <code>ADMIN_TOKEN</code> is empty. <code>/admin</code> is then disabled.</td>
     </tr>
     <tr>
-      <td>Ændring i env-filen har ingen effekt</td>
-      <td>Containeren er ikke genskabt, eller der er gemt indstillinger i admin-panelet. <em>Save</em> dér skriver <code>/data/config.json</code>, som vinder over env. Brug <em>Reset defaults</em>.</td>
+      <td>A change to the env file has no effect</td>
+      <td>The container was not recreated, or settings were saved in the admin panel. <em>Save</em> there writes <code>/data/config.json</code>, which overrides env. Use <em>Reset defaults</em>.</td>
     </tr>
     <tr>
-      <td>Certifikatfejl efter <code>task dev:host:bootstrap</code></td>
-      <td>Nginx bruger stadig de gamle certifikater: <code>docker exec bibleguessr-production-nginx-1 nginx -s reload</code></td>
+      <td>Certificate error after <code>task dev:host:bootstrap</code></td>
+      <td>nginx is still serving the old certificates: <code>docker exec bibleguessr-production-nginx-1 nginx -s reload</code></td>
     </tr>
     <tr>
-      <td>429 på login eller <code>/admin</code></td>
-      <td>Nginx rate-limit (zone <code>vault_login</code>). Vent et øjeblik.</td>
+      <td>429 on login or <code>/admin</code></td>
+      <td>nginx rate limit (zone <code>vault_login</code>). Wait a moment.</td>
     </tr>
   </table>
   </div>
