@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   COMPOSE_CMD: docker compose --env-file env/app.env --env-file env/nginx.env --env-file env/letsencrypt.env --env-file env/bibleguessr/webapi.env --env-file .env -f docker-compose.yml -p bibleguessr-production
-  APP_VERSION: 0.0.3
+  APP_VERSION: 0.0.4
 
 tasks:
   docker:list-volumes:

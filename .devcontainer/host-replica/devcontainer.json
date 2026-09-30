@@ -41,7 +41,8 @@
         "task.vscode-task",
         "AndenetAlexander.vim-cheatsheet",
         "Anthropic.claude-code",
-        "google.google-antigravity"
+        "google.google-antigravity",
+        "ritwickdey.LiveServer"
       ],
       "settings": {
         "editor.insertSpaces": true,
