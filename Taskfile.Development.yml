@@ -9,3 +9,13 @@ tasks:
     desc: (Run in container (srv)) Use devcerts as is was letsencrypt produced certs
     cmds:
       - ./scripts/development/use-dev-certs-as-if-letsencrypt.sh
+  logs:nginx:
+    desc: "Follow nginx logs (last 100 lines). Extra args after --, e.g. task dev:logs:nginx -- --since=10m"
+    cmds:
+      - docker compose -p bibleguessr-production logs -f --tail=100 {{.CLI_ARGS}} nginx
+    interactive: true
+  logs:vaultwarden:
+    desc: "Follow vaultwarden logs (last 100 lines). Extra args after --, e.g. task dev:logs:vaultwarden -- --since=10m"
+    cmds:
+      - docker compose -p bibleguessr-production logs -f --tail=100 {{.CLI_ARGS}} vaultwarden
+    interactive: true
