@@ -3,8 +3,8 @@ set -eu
 
 domains=(
   "kforkode.dk"
-  "habibi-vip-taxi.com"
-  "carstens-vinduespolering.dk"
+  "vault.kforkode.dk"
+  "bibleguessr.uk"
 )
 
 for domain in "${domains[@]}"; do
