@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>security basics</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main>
+  <p><a href="../index.html">← Overview</a></p>
+  <h1>security basics</h1>
+  <p class="lead">A starting point if you are new to running a Linux server: how to watch resource use, how to stop logs from filling the disk, and how to tell normal traffic from an attack. Written for this server specifically — commands marked <strong>(tested)</strong> were run against the live journal during a debugging session.</p>
+
+  <nav>
+    <ul>
+      <li><a href="#load">1. Watch system load</a></li>
+      <li><a href="#containers">2. Watch container resource use</a></li>
+      <li><a href="#disk">3. Watch disk space</a></li>
+      <li><a href="#logsize">4. Stop logs from filling the disk</a></li>
+      <li><a href="#attack">5. Tell normal traffic from an attack</a></li>
+      <li><a href="#block">6. Block an attacker</a></li>
+      <li><a href="#cli">7. Recommended CLI tools</a></li>
+      <li><a href="#vscode">8. Recommended VS Code extensions</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="load">1. Watch system load</h2>
+  <p><code>uptime</code> shows three numbers: the average number of processes waiting for CPU over the last 1, 5 and 15 minutes. They only mean something relative to how many CPU cores the server has.</p>
+  <pre><code>uptime
+# 14:32:01 up 12 days,  3:04,  1 user,  load average: 0.15, 0.22, 0.19
+
+nproc
+# 2</code></pre>
+  <p class="warn">A load average of <code>1.8</code> on a 2-core machine means the CPUs are almost saturated. The same <code>1.8</code> on an 8-core machine is nothing to worry about. Always read load next to <code>nproc</code>.</p>
+  <p>For a live, per-process view (CPU%, memory%, who is using it):</p>
+  <pre><code>top
+# or, easier to read:
+htop</code></pre>
+  <p>Memory specifically:</p>
+  <pre><code>free -h
+#                total        used        free      shared  buff/cache   available
+# Mem:           3.8Gi       1.2Gi       512Mi        45Mi        2.1Gi       2.3Gi</code></pre>
+
+  <h2 id="containers">2. Watch container resource use</h2>
+  <p>System-wide numbers do not tell you <em>which</em> container is the problem. <code>docker stats</code> does, live, per container:</p>
+  <pre><code>docker stats
+# NAME                                CPU %     MEM USAGE / LIMIT   MEM %
+# bibleguessr-production-nginx-1      0.02%     8MiB / 3.8GiB       0.2%
+# bibleguessr-production-bibleguessr-api-1   4.10%   180MiB / 3.8GiB   4.7%</code></pre>
+  <p>Add <code>--no-stream</code> for a single snapshot instead of a live refresh (useful in scripts):</p>
+  <pre><code>docker stats --no-stream</code></pre>
+  <p>If one container's CPU% is pinned near 100% while <code>uptime</code> looks fine overall, the problem is in that one service, not the host.</p>
+
+  <h2 id="disk">3. Watch disk space</h2>
+  <pre><code>df -h /
+# Filesystem      Size  Used Avail Use% Mounted on
+# /dev/sda1        40G   14G   24G  37% /</code></pre>
+  <p>Docker volumes and images accumulate over time (old image versions from <code>task docker:site:pull</code>, unused volumes). Find what is actually taking space:</p>
+  <pre><code>docker system df
+docker system df -v   # broken down per image/volume</code></pre>
+
+  <h2 id="logsize">4. Stop logs from filling the disk</h2>
+  <p>This server's nginx container logs to <code>journald</code> (<code>NGINX_LOGGING_DRIVER=journald</code> in <a href="../../../env/nginx.env">env/nginx.env</a>), not to a file Docker rotates itself. journald has its own size cap — check it before it becomes a problem:</p>
+  <pre><code>journalctl --disk-usage
+# Archived and active journals take up 512.0M in the file system.</code></pre>
+  <p>Set a hard ceiling in <code>/etc/systemd/journald.conf</code>:</p>
+  <pre><code>sudo sed -i 's/^#SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+sudo systemctl restart systemd-journald</code></pre>
+  <p>Or shrink what is already stored, without touching the config permanently:</p>
+  <pre><code>sudo journalctl --vacuum-size=500M
+sudo journalctl --vacuum-time=2weeks</code></pre>
+  <p class="warn">If a service ever used the <code>json-file</code> driver instead (the default in <a href="../../../docker-compose.yml">docker-compose.yml</a> when <code>NGINX_LOGGING_DRIVER</code> is unset), that log grows unbounded unless you cap it explicitly, since Docker does not rotate <code>json-file</code> logs on its own by default:</p>
+  <pre><code>docker inspect --format='{{json .HostConfig.LogConfig}}' bibleguessr-production-nginx-1</code></pre>
+
+  <h2 id="attack">5. Tell normal traffic from an attack</h2>
+  <p>Find the exact container name first — Compose names containers <code>&lt;project&gt;-&lt;service&gt;-&lt;n&gt;</code>, and the project name here is <code>bibleguessr-production</code> (the <code>name:</code> at the top of <a href="../../../docker-compose.yml">docker-compose.yml</a>):</p>
+  <pre><code>docker ps --format '{{.Names}}'
+# bibleguessr-production-nginx-1
+# bibleguessr-production-bibleguessr-api-1
+# bibleguessr-production-vaultwarden-1</code></pre>
+  <p>Docker tags every journald entry with a <code>CONTAINER_NAME</code> field, so you can filter to just that container. <strong>(tested)</strong></p>
+  <pre><code>journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 --since "1 hour ago"</code></pre>
+  <p class="warn">No space around <code>=</code>. <code>CONTAINER_NAME= bibleguessr-production-nginx-1</code> (with a space) is two separate, broken arguments and journalctl exits with an error.</p>
+  <p><code>-o cat</code> strips journald's own timestamp/hostname fields, leaving just the nginx log line, so field-based tools like <code>awk</code> line up correctly. The first field of the <code>realip</code> log format (<a href="../../../nginx/includes/log-formats.conf">nginx/includes/log-formats.conf</a>) is the client IP. <strong>(tested)</strong></p>
+  <pre><code>journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 -o cat --since "1 hour ago" \
+  | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
+#     612 103.196.9.108
+#      12 85.191.83.141
+#       9 34.67.84.58</code></pre>
+  <p>A unique IP count (<code>sort -u</code>) does <strong>not</strong> tell you whether you are under attack — a busy hour of normal visitors easily produces 40+ distinct IPs, several of which are known cloud/CDN/relay ranges (e.g. <code>17.166.x</code> is Apple Private Relay, <code>104.23.x</code> is Cloudflare). What matters is <em>concentration</em>: one IP with hundreds of requests while everyone else has single digits, as in the example above.</p>
+  <p>Live instead of historical, filtered to just the IPs:</p>
+  <pre><code>journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 -o cat -f | awk '{print $1}'</code></pre>
+  <p>Requests already flagged as suspicious use a separate log format (<code>security_events</code>, defined in <a href="../../../nginx/includes/tarpit.conf">nginx/includes/tarpit.conf</a>) — a quick way to see only the traffic nginx itself considered abnormal:</p>
+  <pre><code>journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 -o cat --since "1 hour ago" | grep SECURITY_EVENT</code></pre>
+  <p>These two lookups are wrapped as tasks in <a href="../../../Taskfile.Security.yml">Taskfile.Security.yml</a>:</p>
+  <pre><code>task security:nginx           # raw log, last hour
+task security:nginx:top-ips   # request count per IP, last hour, sorted</code></pre>
+
+  <h2 id="block">6. Block an attacker</h2>
+  <p>Confirmed bad IPs go in the <code>$bad_guys</code> map in <a href="../../../nginx/includes/bad-guys.conf">nginx/includes/bad-guys.conf</a>, one per line, with the hit count as a comment so the next person knows why it is there:</p>
+  <pre><code>203.0.113.5 1;  # 340 hits to /wp-admin in one hour</code></pre>
+  <p>Requests from a listed IP get dropped with <code>444</code> (connection closed, no response) before any other processing — see <a href="../../../nginx/includes/security-checks.conf">nginx/includes/security-checks.conf</a>. After editing the file, reload nginx without downtime:</p>
+  <pre><code>docker exec bibleguessr-production-nginx-1 nginx -t &amp;&amp; \
+docker exec bibleguessr-production-nginx-1 nginx -s reload</code></pre>
+  <p class="warn">This file is included directly (not a <code>.conf.template</code>), so no <code>task docker:nginx:generate-conf</code> step is needed — just <code>nginx -t</code> and reload.</p>
+
+  <h2 id="cli">7. Recommended CLI tools</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Tool</th><th>Why</th></tr>
+    <tr><td><code>htop</code></td><td>Interactive <code>top</code>: sortable, shows per-core load, easier to read than plain <code>top</code></td></tr>
+    <tr><td><code>ncdu</code></td><td>Interactive <code>du</code>: find what is eating disk space without guessing paths</td></tr>
+    <tr><td><code>ss</code></td><td>Modern replacement for <code>netstat</code>; <code>ss -ltnp</code> shows what is listening on which port</td></tr>
+    <tr><td><code>jq</code></td><td>Parse JSON from the command line — useful for <code>docker inspect</code> output</td></tr>
+    <tr><td><code>lnav</code></td><td>Log file navigator: understands timestamps, lets you jump/filter/search across large logs, including piped journald output</td></tr>
+    <tr><td><code>fail2ban</code></td><td>Automates what section 6 does by hand: watches logs and bans IPs that match a pattern too often. Not currently installed on this server — evaluate before adding another moving part</td></tr>
+  </table>
+  </div>
+  <pre><code>sudo apt install htop ncdu iproute2 jq lnav</code></pre>
+
+  <h2 id="vscode">8. Recommended VS Code extensions</h2>
+  <p>Since you connect over SSH, the most useful extension is the one that lets VS Code itself run on the server:</p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Extension</th><th>Why</th></tr>
+    <tr><td>Remote - SSH (<code>ms-vscode-remote.remote-ssh</code>)</td><td>Open this repo directly on the server; edit, and run terminals, without a separate SSH client</td></tr>
+    <tr><td>Docker (<code>ms-azuretools.vscode-docker</code>)</td><td>Browse running containers, tail logs and open a shell inside one from the sidebar</td></tr>
+    <tr><td>ShellCheck (<code>timonwong.shellcheck</code>)</td><td>Lints the Bash scripts in <code>lib-bash/</code> and <code>scripts/</code> as you edit; catches quoting bugs before they run in production</td></tr>
+    <tr><td>YAML (<code>redhat.vscode-yaml</code>)</td><td>Validation and autocomplete for the Taskfiles and <code>docker-compose.yml</code></td></tr>
+    <tr><td>DotENV (<code>mikestead.dotenv</code>)</td><td>Syntax highlighting for the files under <code>env/</code>, so a stray unquoted value stands out</td></tr>
+  </table>
+  </div>
+</main>
+</body>
+</html>
