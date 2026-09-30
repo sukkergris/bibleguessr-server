@@ -20,8 +20,9 @@
       <li><a href="#logsize">4. Stop logs from filling the disk</a></li>
       <li><a href="#attack">5. Tell normal traffic from an attack</a></li>
       <li><a href="#block">6. Block an attacker</a></li>
-      <li><a href="#cli">7. Recommended CLI tools</a></li>
-      <li><a href="#vscode">8. Recommended VS Code extensions</a></li>
+      <li><a href="#fail2ban">7. fail2ban (not set up yet)</a></li>
+      <li><a href="#cli">8. Recommended CLI tools</a></li>
+      <li><a href="#vscode">9. Recommended VS Code extensions</a></li>
     </ul>
   </nav>
 
@@ -64,10 +65,31 @@ docker system df -v   # broken down per image/volume</code></pre>
   <p>This server's nginx container logs to <code>journald</code> (<code>NGINX_LOGGING_DRIVER=journald</code> in <a href="../../../env/nginx.env">env/nginx.env</a>), not to a file Docker rotates itself. journald has its own size cap — check it before it becomes a problem:</p>
   <pre><code>journalctl --disk-usage
 # Archived and active journals take up 512.0M in the file system.</code></pre>
-  <p>Set a hard ceiling in <code>/etc/systemd/journald.conf</code>:</p>
-  <pre><code>sudo sed -i 's/^#SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+  <p>By default journald keeps growing until it hits a limit computed from free disk space (roughly 10% of the filesystem, capped at 4G), which on a small VPS can mean logs quietly eat space you needed for something else. The fix is to give it an explicit, smaller ceiling instead of trusting the default.</p>
+  <p>Where the setting lives, and what it actually controls:</p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Directive</th><th>Meaning</th></tr>
+    <tr><td><code>Storage=</code></td><td><code>persistent</code> writes to <code>/var/log/journal</code> (survives reboot); <code>volatile</code> writes only to <code>/run/log/journal</code> (RAM, gone on reboot). Check which one is active — it changes what "running out of space" even means.</td></tr>
+    <tr><td><code>SystemMaxUse=</code></td><td>Hard ceiling on total disk space the persistent journal is allowed to use. The one setting that most directly answers "so I don't run out of space".</td></tr>
+    <tr><td><code>SystemKeepFree=</code></td><td>Journald will stop growing before it eats into this much free space on the filesystem, even if under <code>SystemMaxUse</code>. A safety margin under the ceiling.</td></tr>
+    <tr><td><code>MaxRetentionSec=</code></td><td>Deletes entries older than this regardless of size, e.g. <code>30day</code>. Complements <code>SystemMaxUse</code> — one caps size, the other caps age.</td></tr>
+    <tr><td><code>RuntimeMaxUse=</code></td><td>Same idea as <code>SystemMaxUse</code>, but for the volatile (RAM-backed) journal at <code>/run/log/journal</code>. Matters if <code>Storage=volatile</code>, or as a limit on how much RAM logs can consume before a reboot flushes them.</td></tr>
+  </table>
+  </div>
+  <p>Check what is actually configured right now before changing anything — a value already set here overrides the default:</p>
+  <pre><code>grep -E '^(Storage|SystemMaxUse|SystemKeepFree|MaxRetentionSec|RuntimeMaxUse)=' /etc/systemd/journald.conf
+# most of these are commented out (#Prefix) until you set them</code></pre>
+  <p>Set a hard ceiling by size and by age together — this is the pair worth actually having on a small server:</p>
+  <pre><code>sudo sed -i \
+  -e 's/^#\?SystemMaxUse=.*/SystemMaxUse=500M/' \
+  -e 's/^#\?MaxRetentionSec=.*/MaxRetentionSec=30day/' \
+  /etc/systemd/journald.conf
 sudo systemctl restart systemd-journald</code></pre>
-  <p>Or shrink what is already stored, without touching the config permanently:</p>
+  <p>Confirm it took effect:</p>
+  <pre><code>journalctl --disk-usage
+systemctl show systemd-journald.service -p Environment  # sanity check the service restarted cleanly</code></pre>
+  <p>Or shrink what is already stored right now, without waiting for the next rotation:</p>
   <pre><code>sudo journalctl --vacuum-size=500M
 sudo journalctl --vacuum-time=2weeks</code></pre>
   <p class="warn">If a service ever used the <code>json-file</code> driver instead (the default in <a href="../../../docker-compose.yml">docker-compose.yml</a> when <code>NGINX_LOGGING_DRIVER</code> is unset), that log grows unbounded unless you cap it explicitly, since Docker does not rotate <code>json-file</code> logs on its own by default:</p>
@@ -105,7 +127,45 @@ task security:nginx:top-ips   # request count per IP, last hour, sorted</code></
 docker exec bibleguessr-production-nginx-1 nginx -s reload</code></pre>
   <p class="warn">This file is included directly (not a <code>.conf.template</code>), so no <code>task docker:nginx:generate-conf</code> step is needed — just <code>nginx -t</code> and reload.</p>
 
-  <h2 id="cli">7. Recommended CLI tools</h2>
+  <h2 id="fail2ban">7. fail2ban (not set up yet)</h2>
+  <p class="warn">Nothing below is installed on this server. This section explains what fail2ban is and why it is not a drop-in <code>apt install</code> here, so read it before reaching for it.</p>
+  <p>fail2ban automates what section 6 does by hand: it watches a log, and when one IP matches a "bad" pattern too many times in a time window, it adds a firewall rule that blocks that IP for a while, on its own, without anyone reading the log.</p>
+  <p>It has three parts:</p>
+  <ul>
+    <li><strong>filter</strong> — a regex that matches a "bad" line in a log file, e.g. a failed SSH login or a 404 flood.</li>
+    <li><strong>jail</strong> — ties a filter to a log source, a threshold ("5 matches in 10 minutes"), and a ban duration.</li>
+    <li><strong>action</strong> — what happens on ban, almost always an <code>iptables</code>/<code>nftables</code> rule that drops the IP's packets.</li>
+  </ul>
+  <p>Two things make this server's setup harder than the tutorials assume:</p>
+  <ol>
+    <li>
+      <strong>The log is not a file.</strong> fail2ban's default filters expect to <code>tail</code> a file like <code>/var/log/nginx/access.log</code>. This server's nginx logs to <code>journald</code> from inside a container (<a href="#attack">section 5</a>), so a jail here needs <code>backend = systemd</code> and a filter that matches on <code>journalctl CONTAINER_NAME=bibleguessr-production-nginx-1</code> output instead of a plain file path.
+    </li>
+    <li>
+      <strong>The ban has to land before Docker's own rules.</strong> Docker manages its own <code>iptables</code>/<code>nftables</code> chains for port publishing (<code>80:80</code>, <code>443:443</code> in <a href="../../../docker-compose.yml">docker-compose.yml</a>). A fail2ban ban added in the wrong chain, or added after Docker's <code>DOCKER</code> chain has already accepted the packet, does nothing. The ban rule needs to run in the chain Docker's <code>DOCKER-USER</code> chain provides for exactly this purpose.
+    </li>
+  </ol>
+  <p>If you want to try it anyway, the shape of a jail for this setup looks roughly like this (untested — treat as a starting point, not a copy-paste answer):</p>
+  <pre><code>
+# /etc/fail2ban/jail.d/nginx-bibleguessr.local
+[nginx-bibleguessr]
+enabled  = true
+backend  = systemd
+journalmatch = CONTAINER_NAME=bibleguessr-production-nginx-1
+filter   = nginx-bibleguessr
+maxretry = 20
+findtime = 60
+bantime  = 3600
+banaction = iptables-multiport[chain="DOCKER-USER"]</code></pre>
+  <p>and a filter matching the <code>realip</code> format from <a href="../../../nginx/includes/log-formats.conf">nginx/includes/log-formats.conf</a>, e.g. any request that returns <code>444</code> (dropped by <code>$bad_guys</code> or <code>security-checks.conf</code> already):</p>
+  <pre><code>
+# /etc/fail2ban/filter.d/nginx-bibleguessr.local
+[Definition]
+failregex = ^&lt;HOST&gt; .* " 444 
+</code></pre>
+  <p>Start small if you do set it up: run <code>fail2ban-client status nginx-bibleguessr</code> after a while and check it is actually seeing hits before trusting it to ban anyone.</p>
+
+  <h2 id="cli">8. Recommended CLI tools</h2>
   <div class="table-wrap">
   <table>
     <tr><th>Tool</th><th>Why</th></tr>
@@ -114,12 +174,12 @@ docker exec bibleguessr-production-nginx-1 nginx -s reload</code></pre>
     <tr><td><code>ss</code></td><td>Modern replacement for <code>netstat</code>; <code>ss -ltnp</code> shows what is listening on which port</td></tr>
     <tr><td><code>jq</code></td><td>Parse JSON from the command line — useful for <code>docker inspect</code> output</td></tr>
     <tr><td><code>lnav</code></td><td>Log file navigator: understands timestamps, lets you jump/filter/search across large logs, including piped journald output</td></tr>
-    <tr><td><code>fail2ban</code></td><td>Automates what section 6 does by hand: watches logs and bans IPs that match a pattern too often. Not currently installed on this server — evaluate before adding another moving part</td></tr>
+    <tr><td><code>fail2ban</code></td><td>See <a href="#fail2ban">section 7</a> — not currently installed on this server, and needs non-default configuration here</td></tr>
   </table>
   </div>
   <pre><code>sudo apt install htop ncdu iproute2 jq lnav</code></pre>
 
-  <h2 id="vscode">8. Recommended VS Code extensions</h2>
+  <h2 id="vscode">9. Recommended VS Code extensions</h2>
   <p>Since you connect over SSH, the most useful extension is the one that lets VS Code itself run on the server:</p>
   <div class="table-wrap">
   <table>

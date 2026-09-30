@@ -11,3 +11,7 @@ tasks:
     desc: Requests per IP in the last hour, most active first
     cmds:
       - journalctl CONTAINER_NAME=bibleguessr-production-nginx-1 -o cat --since "1 hour ago" | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
+  api:
+    desc: Tail the webapi container log
+    cmds:
+      - docker logs -f --since 1h bibleguessr-production-bibleguessr-api-1

@@ -41,3 +41,7 @@ tasks:
     deps: [nginx:generate-conf]
     cmds:
       - APP_VERSION={{ .APP_VERSION }} ./scripts/test/nginx-routing.sh
+  
+  list:names:
+    cmds:
+      - docker ps --format '{{.Names}}'
