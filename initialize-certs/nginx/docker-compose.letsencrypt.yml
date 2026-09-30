@@ -13,7 +13,8 @@ services:
     volumes:
       - /var/www/letsencrypt_challenges:/var/www/letsencrypt_challenges
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /opt/app/initialize-certs/nginx/letsencrypt_acme.conf:/etc/nginx/conf.d/letsencrypt_acme.conf:ro
+      - ./letsencrypt_acme.conf:/etc/nginx/conf.d/letsencrypt_acme.conf:ro
+      - ./sites-enabled:/etc/nginx/sites-enabled:ro
     restart: unless-stopped
 
 # No other services are needed for initial cert issuance.

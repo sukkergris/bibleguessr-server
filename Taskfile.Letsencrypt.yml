@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+  bootstrap:
+    desc: Bootstrap app for securing cert's pre ssh (using http first)
+    dir: ./initialize-certs/nginx/
+    cmds:
+      - docker compose -f docker-compose.letsencrypt.yml up -d
+  down:
+    desc: Take down bootstrap app
+    dir: ./initialize-certs/nginx/
+    cmds:
+      - docker compose -f docker-compose.letsencrypt.yml down
