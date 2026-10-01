@@ -19,3 +19,8 @@ tasks:
     cmds:
       - docker compose -p bibleguessr-production logs -f --tail=100 {{.CLI_ARGS}} vaultwarden
     interactive: true
+  logs:webapi:
+    desc: "Follow webapi logs (last 100 lines). Extra args after --, e.g. task dev:logs:webapi -- --since=10m"
+    cmds:
+      - docker compose -p bibleguessr-production logs -f --tail=100 {{.CLI_ARGS}} bibleguessr-api
+    interactive: true
