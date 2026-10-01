@@ -34,6 +34,7 @@ services:
       # Named volume (not a bind mount): a fresh volume inherits apiuser's
       # (UID 1000) ownership from the image. The API unpacks the Bible archive here.
       - bible-data:/data/bibles
+      - game-db:/data/db
     networks:
       - bibleguessr-prod
     restart: unless-stopped
@@ -55,6 +56,7 @@ services:
 
 volumes:
   bible-data:
+  game-db:
   vaultwarden-data:
 
 networks:
